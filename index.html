@@ -435,7 +435,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
           <th data-k="dpost">Dto post cupón</th>
           <th class="gsep" data-k="mgpre">Margen pre cupón</th>
           <th data-k="mgpost">Margen post cupón</th>
-          <th class="gsep" data-k="cup">Cupón</th>
+          <th class="gsep" data-k="cupTxt">Cupón / Regla</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -1132,12 +1132,13 @@ function ordAgg(rows){
   const m=new Map();
   for(const r of rows){
     const oi=r[C.order];
-    if(!m.has(oi))m.set(oi,{ing:0,ingBruto:0,env:0,q:0,dl:0,dc:0,cost:0,fecha:r[C.fecha],marcas:new Map(),cups:new Set()});
+    if(!m.has(oi))m.set(oi,{ing:0,ingBruto:0,env:0,q:0,dl:0,dc:0,cost:0,fecha:r[C.fecha],marcas:new Map(),codes:new Set(),rules:new Set()});
     const o=m.get(oi);
     o.ing+=r[C.ingr]; o.ingBruto+=r[C.ing]; o.env+=r[C.env]; o.q+=r[C.q];
     o.dl+=r[C.dl]; o.dc+=r[C.dc]; o.cost+=r[C.cost];
     o.marcas.set(r[C.marca],(o.marcas.get(r[C.marca])||0)+r[C.ingr]);
-    if(r[C.cup]>=0)o.cups.add(RAW.cupones[r[C.cup]]);
+    if(r[C.code]>=0)o.codes.add(RAW.codes[r[C.code]]);
+    if(r[C.rule]>=0)o.rules.add(RAW.rules[r[C.rule]]);
     if(r[C.fecha]<o.fecha)o.fecha=r[C.fecha];
   }
   return [...m.entries()].map(([oi,o])=>{
@@ -1155,7 +1156,8 @@ function ordAgg(rows){
       dpost: lista? (o.dl+o.dc)/lista : 0,          // % dscto con cupón (lista + cupón)
       mgpre: o.ingBruto? ((o.ingBruto/IVA)-o.cost)/(o.ingBruto/IVA) : 0,   // margen pre cupón sin IVA
       mgpost: o.ing? ((o.ing/IVA)-o.cost)/(o.ing/IVA) : 0,                 // margen post cupón sin IVA
-      cup: o.cups.size? (o.cups.size>1? o.cups.size+" cupones" : [...o.cups][0]) : "—",
+      codes:[...o.codes], rules:[...o.rules],
+      cupTxt: [...o.codes, ...o.rules].join(" ") || "—",   // para búsqueda
     };
   });
 }
@@ -1170,7 +1172,7 @@ function renderH4(rows){
       const [sku,prod]=RAW.skus[r[C.sku]];
       if(sku.toLowerCase().includes(q)||prod.toLowerCase().includes(q)) oiConSku.add(r[C.order]);
     }
-    data=data.filter(d=>d.mag.toLowerCase().includes(q)||String(d.ora).toLowerCase().includes(q)||d.marca.toLowerCase().includes(q)||d.cup.toLowerCase().includes(q)||oiConSku.has(d.oi));
+    data=data.filter(d=>d.mag.toLowerCase().includes(q)||String(d.ora).toLowerCase().includes(q)||d.marca.toLowerCase().includes(q)||d.cupTxt.toLowerCase().includes(q)||oiConSku.has(d.oi));
   }
   const k=ordSort.k,dir=ordSort.dir;
   data.sort((a,b)=>{const va=a[k],vb=b[k];return (typeof va==="string"?String(va).localeCompare(String(vb)):va-vb)*dir;});
@@ -1194,7 +1196,7 @@ function renderH4(rows){
     <td class="num">${fmtP(d.dpost)}</td>
     <td class="num gsep">${fmtP(d.mgpre)}</td>
     <td class="num ${d.mgpost<0?"neg":"pos"}">${fmtP(d.mgpost)}</td>
-    <td class="l gsep">${d.cup}</td>
+    <td class="l gsep">${(d.codes.length||d.rules.length)?d.codes.map(c=>`<span class="cuptag code">${c}</span>`).join(" ")+" "+d.rules.map(r=>`<span class="cuptag rule">${r}</span>`).join(" "):"—"}</td>
   </tr>`+(open?`<tr class="detailrow"><td></td><td colspan="13">${ordDetail(d.oi,rows)}</td></tr>`:"");
   }).join(""):'<tr><td colspan="14" class="empty l">Sin órdenes para ese filtro.</td></tr>';
   // wire de los botones de expandir
@@ -1216,7 +1218,7 @@ function initH4(){
     if(!th.dataset.k) return;
     th.onclick=()=>{
       const key=th.dataset.k;
-      if(ordSort.k===key)ordSort.dir*=-1;else ordSort={k:key,dir:["mag","ora","fecha","marca","cup"].includes(key)?1:-1};
+      if(ordSort.k===key)ordSort.dir*=-1;else ordSort={k:key,dir:["mag","ora","fecha","marca","cupTxt"].includes(key)?1:-1};
       ordPage=0;renderH4(filtered(FM.p4));
     };
   });
