@@ -303,6 +303,13 @@ td .pct{color:var(--muted);font-size:.74rem;margin-left:6px}
 .loadhint{color:var(--muted);margin-left:auto}
 body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
 @media(max-width:900px){.hero,.blocks{grid-template-columns:1fr}}
+.catprod{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px}
+@media(max-width:900px){.catprod{grid-template-columns:1fr}}
+.cp-col{min-width:0}
+.cp-title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:.9rem;color:var(--ink);margin-bottom:8px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+#cat5table tbody tr{cursor:pointer}
+#cat5table tbody tr:hover td{background:var(--morado-soft)}
+#cat5table tbody tr.sel td{background:var(--morado-soft);font-weight:600;box-shadow:inset 3px 0 0 var(--morado)}
 @media(max-width:760px){
   header,main{padding-left:14px;padding-right:14px}
   .filters,.loadbar{margin-left:14px;margin-right:14px}
@@ -323,6 +330,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
     <button class="tab" data-page="p3" role="tab">2 · Cupones</button>
     <button class="tab" data-page="p4" role="tab">3 · Órdenes</button>
     <button class="tab" data-page="p2" role="tab">4 · Detalle SKU</button>
+    <button class="tab" data-page="p5" role="tab">5 · Cupón × categoría</button>
   </nav>
 </header>
 
@@ -521,6 +529,65 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
   </div>
 </section>
 
+<!-- ============ HOJA 5 · CUPÓN × CATEGORÍA ============ -->
+<section class="page" id="p5">
+  <div class="pagebar"><label for="fmarca_p5">Marca</label>
+    <select id="fmarca_p5"><option value="-1">Todas las marcas</option></select>
+    <span class="hint">filtro independiente de esta hoja</span></div>
+  <div class="panel">
+    <h2>Uso de cupón por categoría y producto</h2>
+    <div class="alert">⚠️ Valores sin despacho · "Venta" = ingreso c/cupón (lo que se pagó).</div>
+    <div class="tablebar">
+      <div class="msel" id="cup5filter">
+        <button type="button" class="msel-btn" id="cup5filterBtn">Todos los cupones ▾</button>
+        <div class="msel-pop" id="cup5filterPop" hidden>
+          <input type="search" id="cup5filterSearch" placeholder="Buscar cupón… (ej. 2DA20)">
+          <div class="msel-actions">
+            <button type="button" id="cup5SelAll">Seleccionar todos</button>
+            <button type="button" id="cup5SelNone">Ninguno</button>
+          </div>
+          <div class="msel-list" id="cup5filterList"></div>
+        </div>
+      </div>
+      <span class="count" id="cup5count"></span>
+    </div>
+    <div class="catprod">
+      <div class="cp-col">
+        <div class="cp-title">Categorías donde se usa <span class="hint" id="cp-cathint">click para filtrar productos →</span></div>
+        <div style="overflow:auto;max-height:68vh">
+        <table id="cat5table">
+          <thead><tr class="cols">
+            <th class="l" data-k="cat">Categoría</th>
+            <th data-k="venta">Venta</th>
+            <th data-k="pcup">% del cupón</th>
+            <th data-k="pcat">% de la cat.</th>
+            <th data-k="dto">% Dscto</th>
+            <th data-k="q">Q</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        </div>
+      </div>
+      <div class="cp-col">
+        <div class="cp-title">Productos donde se usa <span class="hint" id="cp-prodhint"></span></div>
+        <div style="overflow:auto;max-height:68vh">
+        <table id="prod5table">
+          <thead><tr class="cols">
+            <th class="l" data-k="prod">Producto</th>
+            <th data-k="venta">Venta</th>
+            <th data-k="pcup">% del cupón</th>
+            <th data-k="dto">% Dscto</th>
+            <th data-k="q">Q</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    <div class="note">% del cupón = venta de la fila ÷ venta total del/los cupón(es) seleccionados (suma 100%) · % de la cat. = venta con cupón ÷ venta total de esa categoría (penetración) · % Dscto = descuento total sobre precio de lista.</div>
+  </div>
+</section>
+
 </main>
 
 <script>
@@ -704,7 +771,7 @@ const fmtC = n=>{ // compacto para cards
 
 /* ---------- filtros ---------- */
 const F={store:-1,d1:null,d2:null,h1:0,h2:23};  // d1/d2 se fijan al cargar el Excel
-const FM={p1:-1,p2:-1,p3:-1,p4:-1};  // filtro de marca independiente por hoja
+const FM={p1:-1,p2:-1,p3:-1,p4:-1,p5:-1};  // filtro de marca independiente por hoja
 
 function initFilters(){
   const sel=$("#fstore");
@@ -712,7 +779,7 @@ function initFilters(){
   $("#fdesde").value=F.d1; $("#fdesde").min=RAW.periodo[0]; $("#fdesde").max=RAW.periodo[1];
   $("#fhasta").value=F.d2; $("#fhasta").min=RAW.periodo[0]; $("#fhasta").max=RAW.periodo[1];
   sel.onchange=()=>{F.store=+sel.value;render();};
-  ["p1","p2","p3","p4"].forEach(p=>{
+  ["p1","p2","p3","p4","p5"].forEach(p=>{
     const ms=document.getElementById("fmarca_"+p);
     RAW.marcas.forEach((m,i)=>{const o=document.createElement("option");o.value=i;o.textContent=m;ms.appendChild(o);});
     ms.onchange=()=>{FM[p]=+ms.value;render();};
@@ -1333,6 +1400,128 @@ function initH4(){
   const nx=document.getElementById("ordnext"); if(nx)nx.onclick=()=>{ordPage++;renderH4(filtered(FM.p4));};
 }
 
+/* ---------- HOJA 5 · CUPÓN × CATEGORÍA ---------- */
+let cup5Sel=new Set();        // cupones seleccionados en hoja 5 (vacío = todos)
+let cup5ListQuery="";
+let cup5Available=[];
+let cat5Sel=null;             // categoría seleccionada (string) para filtrar productos
+let cat5Sort={k:"venta",dir:-1}, prod5Sort={k:"venta",dir:-1};
+
+function renderCup5Filter(available){
+  cup5Available=available.slice().sort((a,b)=>a.localeCompare(b));
+  for(const c of [...cup5Sel]) if(!cup5Available.includes(c)) cup5Sel.delete(c);
+  const btn=document.getElementById("cup5filterBtn");
+  if(btn) btn.textContent=(cup5Sel.size? cup5Sel.size+" seleccionado(s)" : "Todos los cupones")+" ▾";
+  const list=document.getElementById("cup5filterList");
+  if(!list) return;
+  const q=cup5ListQuery.toLowerCase();
+  const shown=cup5Available.filter(c=>!q||c.toLowerCase().includes(q));
+  list.innerHTML=shown.length?shown.map(c=>{
+    const safe=c.replace(/"/g,"&quot;").replace(/</g,"&lt;");
+    return `<label><input type="checkbox" value="${safe}" ${cup5Sel.has(c)?"checked":""}><span class="cn" title="${safe}">${safe}</span></label>`;
+  }).join(""):'<div class="empty">Sin cupones que coincidan.</div>';
+  list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.onchange=()=>{ cb.checked?cup5Sel.add(cb.value):cup5Sel.delete(cb.value); renderH5(filtered(FM.p5)); };
+  });
+}
+
+function renderH5(rows){
+  const IVA=1.19;
+  // cupones disponibles en el scope (para el filtro)
+  const avail=[...new Set(rows.filter(r=>r[C.cup]>=0).map(r=>RAW.cupones[r[C.cup]]))];
+  // filas que cuentan como "uso de cupón": las del/los cupón(es) seleccionados, o cualquier cupón si no hay selección
+  const S=cup5Sel;
+  const cupRows=rows.filter(r=>{
+    if(r[C.cup]<0) return false;
+    return S.size? S.has(RAW.cupones[r[C.cup]]) : true;
+  });
+  const totalCupVenta=cupRows.reduce((s,r)=>s+r[C.ingr],0);
+
+  // venta total POR CATEGORÍA de TODO el scope (para penetración)
+  const catTotal=new Map();
+  for(const r of rows){ const [,,,ci]=RAW.skus[r[C.sku]]; catTotal.set(ci,(catTotal.get(ci)||0)+r[C.ingr]); }
+
+  // agregación por categoría (solo filas con cupón)
+  const catM=new Map();
+  for(const r of cupRows){
+    const [,,,ci]=RAW.skus[r[C.sku]];
+    if(!catM.has(ci))catM.set(ci,{venta:0,q:0,dl:0,dc:0,ing:0});
+    const o=catM.get(ci); o.venta+=r[C.ingr]; o.q+=r[C.q]; o.dl+=r[C.dl]; o.dc+=r[C.dc]; o.ing+=r[C.ing];
+  }
+  let cats=[...catM.entries()].map(([ci,o])=>{
+    const lista=o.ing+o.dl;
+    return {ci,cat:RAW.cats[ci]||"—",venta:o.venta,q:o.q,
+      pcup: totalCupVenta? o.venta/totalCupVenta : 0,
+      pcat: catTotal.get(ci)? o.venta/catTotal.get(ci) : 0,
+      dto: lista? (o.dl+o.dc)/lista : 0};
+  });
+  cats.sort((a,b)=>{const va=a[cat5Sort.k],vb=b[cat5Sort.k];return (typeof va==="string"?va.localeCompare(vb):va-vb)*cat5Sort.dir;});
+  $("#cup5count").textContent=(S.size?S.size+" cupón(es)":"todos los cupones")+" · "+fmt$(totalCupVenta)+" venta c/cupón";
+
+  $("#cat5table tbody").innerHTML=cats.length?cats.map(d=>`<tr data-cat="${(d.cat||'').replace(/"/g,'&quot;')}" class="${cat5Sel===d.cat?'sel':''}">
+    <td class="l">${d.cat}</td>
+    <td class="num">${fmt$(d.venta)}</td>
+    <td class="num">${fmtP(d.pcup)}</td>
+    <td class="num">${fmtP(d.pcat)}</td>
+    <td class="num">${fmtP(d.dto)}</td>
+    <td class="num">${fmtN(d.q)}</td>
+  </tr>`).join(""):'<tr><td colspan="6" class="empty l">Sin uso de cupón en el scope.</td></tr>';
+  // click en categoría -> filtra productos
+  document.querySelectorAll("#cat5table tbody tr").forEach(tr=>{
+    tr.onclick=()=>{ const c=tr.dataset.cat; cat5Sel=(cat5Sel===c)?null:c; renderH5(filtered(FM.p5)); };
+  });
+  // ordenar categorías por encabezado
+  document.querySelectorAll("#cat5table thead th").forEach(th=>{
+    th.style.cursor="pointer";
+    th.onclick=()=>{const k=th.dataset.k;if(cat5Sort.k===k)cat5Sort.dir*=-1;else cat5Sort={k,dir:k==="cat"?1:-1};renderH5(filtered(FM.p5));};
+  });
+
+  // productos (solo filas con cupón, filtrados por categoría si hay una seleccionada)
+  const prodRows=cat5Sel? cupRows.filter(r=>{const [,,,ci]=RAW.skus[r[C.sku]];return (RAW.cats[ci]||"—")===cat5Sel;}) : cupRows;
+  const prodM=new Map();
+  for(const r of prodRows){
+    const k=r[C.sku];
+    if(!prodM.has(k))prodM.set(k,{venta:0,q:0,dl:0,dc:0,ing:0});
+    const o=prodM.get(k); o.venta+=r[C.ingr]; o.q+=r[C.q]; o.dl+=r[C.dl]; o.dc+=r[C.dc]; o.ing+=r[C.ing];
+  }
+  let prods=[...prodM.entries()].map(([k,o])=>{
+    const [sku,prod]=RAW.skus[k]; const lista=o.ing+o.dl;
+    return {prod,sku,venta:o.venta,q:o.q,
+      pcup: totalCupVenta? o.venta/totalCupVenta : 0,
+      dto: lista? (o.dl+o.dc)/lista : 0};
+  });
+  prods.sort((a,b)=>{const va=a[prod5Sort.k],vb=b[prod5Sort.k];return (typeof va==="string"?va.localeCompare(vb):va-vb)*prod5Sort.dir;});
+  document.getElementById("cp-prodhint").textContent=cat5Sel? "filtrado: "+cat5Sel+" (click de nuevo para quitar)" : "todas las categorías";
+  $("#prod5table tbody").innerHTML=prods.length?prods.map(d=>`<tr>
+    <td class="l">${d.prod}</td>
+    <td class="num">${fmt$(d.venta)}</td>
+    <td class="num">${fmtP(d.pcup)}</td>
+    <td class="num">${fmtP(d.dto)}</td>
+    <td class="num">${fmtN(d.q)}</td>
+  </tr>`).join(""):'<tr><td colspan="5" class="empty l">Sin productos para ese filtro.</td></tr>';
+  document.querySelectorAll("#prod5table thead th").forEach(th=>{
+    th.style.cursor="pointer";
+    th.onclick=()=>{const k=th.dataset.k;if(prod5Sort.k===k)prod5Sort.dir*=-1;else prod5Sort={k,dir:k==="prod"?1:-1};renderH5(filtered(FM.p5));};
+  });
+
+  renderCup5Filter(avail);
+}
+
+function initH5(){
+  const btn=document.getElementById("cup5filterBtn"), pop=document.getElementById("cup5filterPop");
+  if(btn&&pop){
+    btn.onclick=(e)=>{e.stopPropagation();pop.hidden=!pop.hidden;};
+    pop.onclick=(e)=>e.stopPropagation();
+    document.addEventListener("click",()=>{if(!pop.hidden)pop.hidden=true;});
+  }
+  const ls=document.getElementById("cup5filterSearch");
+  if(ls)ls.oninput=e=>{cup5ListQuery=e.target.value.trim();renderCup5Filter(cup5Available);};
+  const sa=document.getElementById("cup5SelAll");
+  if(sa)sa.onclick=()=>{const q=cup5ListQuery.toLowerCase();cup5Available.filter(c=>!q||c.toLowerCase().includes(q)).forEach(c=>cup5Sel.add(c));renderH5(filtered(FM.p5));};
+  const sn=document.getElementById("cup5SelNone");
+  if(sn)sn.onclick=()=>{cup5Sel.clear();renderH5(filtered(FM.p5));};
+}
+
 function render(){
   if(!RAW)return;
   const a=agg(filtered());
@@ -1341,6 +1530,7 @@ function render(){
   renderH2(filtered(FM.p2));
   renderH3(filtered(FM.p3));
   renderH4(filtered(FM.p4));
+  renderH5(filtered(FM.p5));
 }
 
 /* ---------- carga del Excel ---------- */
@@ -1357,7 +1547,7 @@ function ingest(arrayBuffer, nombre){
     // reset de filtros a rango del archivo
     F.store=-1;F.d1=RAW.periodo[0];F.d2=RAW.periodo[1];F.h1=0;F.h2=23;
     FM.p1=-1;FM.p2=-1;FM.p3=-1;
-    if(!booted){ initFilters();initH2();initH3();initH4();booted=true; }
+    if(!booted){ initFilters();initH2();initH3();initH4();initH5();booted=true; }
     else { rebuildFilterOptions(); }
     render();
     $bar.className="loadbar ok";
@@ -1376,7 +1566,7 @@ function rebuildFilterOptions(){
   const sel=document.getElementById("fstore");
   sel.innerHTML='<option value="-1">Todas las stores</option>';
   RAW.stores.forEach((s,i)=>{const o=document.createElement("option");o.value=i;o.textContent=s;sel.appendChild(o);});
-  ["p1","p2","p3","p4"].forEach(p=>{
+  ["p1","p2","p3","p4","p5"].forEach(p=>{
     const ms=document.getElementById("fmarca_"+p);
     ms.innerHTML='<option value="-1">Todas las marcas</option>';
     RAW.marcas.forEach((m,i)=>{const o=document.createElement("option");o.value=i;o.textContent=m;ms.appendChild(o);});
