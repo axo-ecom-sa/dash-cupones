@@ -771,9 +771,9 @@ function renderH1(rows){
       )}
       ${block("b-morado span2","Comportamiento de compra","",
         card("Transacciones",fmtN(a.tx),"órdenes en el scope")+
-        card("Ticket promedio",a.tx?fmt$(a.ingTotal/a.tx):"—","con despacho · sin despacho: "+(a.tx?fmt$(a.ingr/a.tx):"—"))+
+        card("Ticket promedio",a.tx?fmt$(a.ingTotal/a.tx):"—","con despacho · sin despacho "+(a.tx?fmt$(a.ingr/a.tx):"—")+(a.ingr?" (+"+((a.env/a.ingr)*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})+"% por despacho)":""))+
         card("Artículos",fmtN(a.q),(a.tx?(a.q/a.tx).toLocaleString("es-CL",{maximumFractionDigits:2}):"—")+" por ticket")+
-        card("Precio medio artículo",a.q?fmt$(a.ingTotal/a.q):"—","sin despacho: "+(a.q?fmt$(a.ingr/a.q):"—"))
+        card("Precio medio artículo",a.q?fmt$(a.ingr/a.q):"—","ingreso de productos ÷ unidades · sin despacho")
       )}
     </div>`;
 
