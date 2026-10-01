@@ -238,6 +238,19 @@ td.l{text-align:left;white-space:normal;line-height:1.45}
 .cuptag.code{background:var(--rosa-soft);color:var(--rosa-ink);font-weight:600}
 .cuptag.rule{background:var(--morado-soft);color:var(--morado-ink)}
 .alert{background:#FFF4E0;border:1px solid #F0D28A;color:#7A5A12;border-radius:8px;padding:9px 14px;font-size:.82rem;margin-bottom:10px}
+.alertpanel{margin-top:14px}
+.alertpanel.danger{border:1.5px solid #E3A6A0;background:#FBEDEB}
+.alertpanel.ok{border:1px solid #BFE0C8;background:#EFF8F1}
+.alertpanel .ah{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:.95rem;color:var(--ink);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.alertpanel.danger .ah{color:#9B372B}
+.alertpanel.ok .ah{color:#2E7D46}
+.alertpanel .ah .sub{font-family:"Manrope",sans-serif;font-weight:400;font-size:.78rem;color:var(--muted)}
+.alerttbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:.84rem}
+.alerttbl th{font-size:.67rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 10px;border-bottom:1.5px solid #E3A6A0}
+.alerttbl th.l{text-align:left}
+.alerttbl td{padding:6px 10px;border-bottom:1px solid #F0DAD6;text-align:right}
+.alerttbl td.l{text-align:left}
+.alerttbl tr:last-child td{border-bottom:none}
 .msel{position:relative}
 .msel-btn{font:inherit;font-size:.85rem;font-weight:600;padding:8px 14px;border:1px solid var(--line2);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap}
 .msel-btn:hover{border-color:var(--morado)}
@@ -344,6 +357,8 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
     <select id="fmarca_p1"><option value="-1">Todas las marcas</option></select>
     <span class="hint">filtro independiente de esta hoja</span></div>
   <div id="cards1"></div>
+
+  <div id="cupalert"></div>
 
   <div class="panel">
     <h2>Ingreso y margen por día</h2>
@@ -781,6 +796,30 @@ function renderH1(rows){
         card("Precio medio artículo",a.q?fmt$(a.ingr/a.q):"—","ingreso de productos ÷ unidades · sin despacho")
       )}
     </div>`;
+
+  // ===== Alerta: cupones con margen post-cupón (sin IVA) < 5% en el scope filtrado =====
+  const UMBRAL=0.05;
+  const cupData=cupAgg(rows, a.ingr);   // mgpost ya es sin IVA
+  const bajos=cupData.filter(d=>d.ing>0 && d.mgpost<UMBRAL).sort((x,y)=>x.mgpost-y.mgpost);
+  if(bajos.length){
+    $("#cupalert").innerHTML=`<div class="panel alertpanel danger">
+      <div class="ah">⚠️ ${bajos.length} cupón(es) con margen crítico <span class="sub">margen post-cupón sin IVA bajo 5% · con los filtros actuales</span></div>
+      <table class="alerttbl"><thead><tr>
+        <th class="l">Cupón</th><th>Usos</th><th>Ingresos</th><th>Margen post</th>
+      </tr></thead><tbody>
+      ${bajos.map(d=>`<tr>
+        <td class="l">${d.cup}</td>
+        <td class="num">${fmtN(d.ord)}</td>
+        <td class="num">${fmt$(d.ing)}</td>
+        <td class="num neg">${fmtP(d.mgpost)}</td>
+      </tr>`).join("")}
+      </tbody></table>
+    </div>`;
+  } else {
+    $("#cupalert").innerHTML=`<div class="panel alertpanel ok">
+      <div class="ah">✓ Ningún cupón con margen bajo 5% <span class="sub">en los filtros seleccionados</span></div>
+    </div>`;
+  }
 
   // serie diaria (montos SIN despacho)
   const byday=new Map();
