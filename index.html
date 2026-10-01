@@ -437,7 +437,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
     <h2>Detalle por órdenes</h2>
     <div class="sub">Cada fila es una orden. ID Magento (empieza con C) y su ID Oracle. Click en un encabezado para ordenar.</div>
     <div class="tablebar">
-      <input type="search" id="ordsearch" placeholder="Buscar ID Magento, ID Oracle, marca o SKU…">
+      <input type="search" id="ordsearch" placeholder="Buscar ID Magento, ID Oracle, marca, SKU o tipo de despacho…">
       <span class="count" id="ordcount"></span>
     </div>
     <div class="tablewrap">
@@ -453,6 +453,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
           <th class="gsep" data-k="ingBruto">Ingreso s/cupón</th>
           <th data-k="ing">Ingreso c/cupón</th>
           <th data-k="env">Despacho</th>
+          <th class="l" data-k="shipDesc">Tipo de despacho</th>
           <th class="gsep" data-k="dpre">Dto pre cupón</th>
           <th data-k="dpost">Dto post cupón</th>
           <th class="gsep" data-k="mgpre">Margen pre cupón</th>
@@ -600,6 +601,7 @@ function buildRAW(arrayBuffer) {
   // primera línea de cada orden (para asignar envío una sola vez)
   const firstLineSeen = new Set();
   const oracles = [];   // oracles[oi] = oracle_id de la orden
+  const shipDesc = [];  // shipDesc[oi] = shipping_description de la orden
 
   const rows = [];
   let fmin = null, fmax = null;
@@ -621,6 +623,7 @@ function buildRAW(arrayBuffer) {
     const mi = idxOf(marcas, mIdx, marca);
     const oi = idxOf(orders, oIdx, String(r.order_id));
     if (oracles[oi] === undefined) oracles[oi] = clean(r.oracle_id);
+    if (shipDesc[oi] === undefined) shipDesc[oi] = clean(r.shipping_description) || "—";
 
     if (!kIdx.has(skuBase)) {
       const i = skus.length; kIdx.set(skuBase, i);
@@ -676,7 +679,7 @@ function buildRAW(arrayBuffer) {
   }
 
   return {
-    stores, marcas, cupones, skus, rows, orders, oracles,
+    stores, marcas, cupones, skus, rows, orders, oracles, shipDesc,
     cats, subcats, codes, rules,
     periodo: [fmin, fmax],
   };
@@ -1250,6 +1253,7 @@ function ordAgg(rows){
       oi,
       mag: RAW.orders[oi],
       ora: (RAW.oracles[oi]||"—"),
+      shipDesc: (RAW.shipDesc?RAW.shipDesc[oi]:"")||"—",
       fecha:o.fecha, marca,
       q:o.q, ing:o.ing, ingBruto:o.ingBruto, env:o.env,
       dpre: lista? o.dl/lista : 0,                  // % dscto pre cupón (solo lista)
@@ -1272,7 +1276,7 @@ function renderH4(rows){
       const [sku,prod]=RAW.skus[r[C.sku]];
       if(sku.toLowerCase().includes(q)||prod.toLowerCase().includes(q)) oiConSku.add(r[C.order]);
     }
-    data=data.filter(d=>d.mag.toLowerCase().includes(q)||String(d.ora).toLowerCase().includes(q)||d.marca.toLowerCase().includes(q)||d.cupTxt.toLowerCase().includes(q)||oiConSku.has(d.oi));
+    data=data.filter(d=>d.mag.toLowerCase().includes(q)||String(d.ora).toLowerCase().includes(q)||d.marca.toLowerCase().includes(q)||d.cupTxt.toLowerCase().includes(q)||(d.shipDesc||"").toLowerCase().includes(q)||oiConSku.has(d.oi));
   }
   const k=ordSort.k,dir=ordSort.dir;
   data.sort((a,b)=>{const va=a[k],vb=b[k];return (typeof va==="string"?String(va).localeCompare(String(vb)):va-vb)*dir;});
@@ -1292,12 +1296,13 @@ function renderH4(rows){
     <td class="num gsep">${fmt$(d.ingBruto)}</td>
     <td class="num">${fmt$(d.ing)}</td>
     <td class="num">${fmt$(d.env)}</td>
+    <td class="l">${d.shipDesc}</td>
     <td class="num gsep">${fmtP(d.dpre)}</td>
     <td class="num">${fmtP(d.dpost)}</td>
     <td class="num gsep">${fmtP(d.mgpre)}</td>
     <td class="num ${d.mgpost<0?"neg":"pos"}">${fmtP(d.mgpost)}</td>
     <td class="l gsep">${(d.codes.length||d.rules.length)?d.codes.map(c=>`<span class="cuptag code">${c}</span>`).join(" ")+" "+d.rules.map(r=>`<span class="cuptag rule">${r}</span>`).join(" "):"—"}</td>
-  </tr>`+(open?`<tr class="detailrow"><td></td><td colspan="13">${ordDetail(d.oi,rows)}</td></tr>`:"");
+  </tr>`+(open?`<tr class="detailrow"><td></td><td colspan="14">${ordDetail(d.oi,rows)}</td></tr>`:"");
   }).join(""):'<tr><td colspan="14" class="empty l">Sin órdenes para ese filtro.</td></tr>';
   // wire de los botones de expandir
   document.querySelectorAll("#ordtable .expbtn").forEach(b=>{
@@ -1318,7 +1323,7 @@ function initH4(){
     if(!th.dataset.k) return;
     th.onclick=()=>{
       const key=th.dataset.k;
-      if(ordSort.k===key)ordSort.dir*=-1;else ordSort={k:key,dir:["mag","ora","fecha","marca","cupTxt"].includes(key)?1:-1};
+      if(ordSort.k===key)ordSort.dir*=-1;else ordSort={k:key,dir:["mag","ora","fecha","marca","shipDesc","cupTxt"].includes(key)?1:-1};
       ordPage=0;renderH4(filtered(FM.p4));
     };
   });
