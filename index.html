@@ -360,6 +360,8 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
 
   <div id="cupalert"></div>
 
+  <div id="skualert"></div>
+
   <div class="panel">
     <h2>Ingreso y margen por día</h2>
     <div class="sub">Barras = ingreso diario con despacho · línea = % margen (sin IVA, sin despacho)</div>
@@ -797,27 +799,79 @@ function renderH1(rows){
       )}
     </div>`;
 
-  // ===== Alerta: cupones con margen post-cupón (sin IVA) < 5% en el scope filtrado =====
-  const UMBRAL=0.05;
+  // ===== Alerta 1: cupones con margen post-cupón (sin IVA) BAJO el margen global ponderado del scope =====
+  const mgGlobal = mrSinDesp;   // margen real sin IVA del scope (ponderado)
   const cupData=cupAgg(rows, a.ingr);   // mgpost ya es sin IVA
-  const bajos=cupData.filter(d=>d.ing>0 && d.mgpost<UMBRAL).sort((x,y)=>x.mgpost-y.mgpost);
-  if(bajos.length){
+  const bajosCup=cupData.filter(d=>d.ing>0 && d.mgpost<mgGlobal).sort((x,y)=>x.mgpost-y.mgpost);
+  if(bajosCup.length){
     $("#cupalert").innerHTML=`<div class="panel alertpanel danger">
-      <div class="ah">⚠️ ${bajos.length} cupón(es) con margen crítico <span class="sub">margen post-cupón sin IVA bajo 5% · con los filtros actuales</span></div>
+      <div class="ah">⚠️ ${bajosCup.length} cupón(es) bajo el margen promedio <span class="sub">margen post-cupón sin IVA bajo el promedio del scope (${fmtP(mgGlobal)}) · filtros actuales</span></div>
       <table class="alerttbl"><thead><tr>
-        <th class="l">Cupón</th><th>Usos</th><th>Ingresos</th><th>Margen post</th>
+        <th class="l">Cupón</th><th>Usos</th><th>Ingresos</th><th>Margen post</th><th>vs promedio</th>
       </tr></thead><tbody>
-      ${bajos.map(d=>`<tr>
+      ${bajosCup.map(d=>`<tr>
         <td class="l">${d.cup}</td>
         <td class="num">${fmtN(d.ord)}</td>
         <td class="num">${fmt$(d.ing)}</td>
         <td class="num neg">${fmtP(d.mgpost)}</td>
+        <td class="num neg">${((d.mgpost-mgGlobal)*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})} pts</td>
       </tr>`).join("")}
       </tbody></table>
     </div>`;
   } else {
     $("#cupalert").innerHTML=`<div class="panel alertpanel ok">
-      <div class="ah">✓ Ningún cupón con margen bajo 5% <span class="sub">en los filtros seleccionados</span></div>
+      <div class="ah">✓ Ningún cupón bajo el margen promedio <span class="sub">promedio del scope: ${fmtP(mgGlobal)}</span></div>
+    </div>`;
+  }
+
+  // ===== Alerta 2: SKU que se venden con margen BAJO el de su categoría (ponderado) =====
+  // margen ponderado por categoría (sin IVA)
+  const catAgg=new Map();   // catIdx -> {ingr, cost}
+  const skuMap=new Map();   // skuIdx -> {ingr, cost, ci}
+  for(const r of rows){
+    const [,,mi,ci]=RAW.skus[r[C.sku]];
+    if(!catAgg.has(ci))catAgg.set(ci,{ingr:0,cost:0});
+    const c=catAgg.get(ci); c.ingr+=r[C.ingr]; c.cost+=r[C.cost];
+    const k=r[C.sku];
+    if(!skuMap.has(k))skuMap.set(k,{ingr:0,cost:0,q:0,ci});
+    const s=skuMap.get(k); s.ingr+=r[C.ingr]; s.cost+=r[C.cost]; s.q+=r[C.q];
+  }
+  const catMg=new Map();
+  for(const [ci,c] of catAgg) catMg.set(ci, c.ingr?((c.ingr/IVA)-c.cost)/(c.ingr/IVA):0);
+  const bajosSku=[];
+  for(const [k,s] of skuMap){
+    if(s.ingr<=0) continue;
+    const mg=((s.ingr/IVA)-s.cost)/(s.ingr/IVA);
+    const mgcat=catMg.get(s.ci)||0;
+    if(mg<mgcat){
+      const [sku,prod,mi,ci,sci]=RAW.skus[k];
+      bajosSku.push({sku,prod,cat:RAW.cats[ci]||"—",ingr:s.ingr,q:s.q,mg,mgcat,gap:mg-mgcat});
+    }
+  }
+  bajosSku.sort((a,b)=>a.gap-b.gap);   // peor brecha primero
+  const TOPSKU=15;   // mostrar los 15 peores para no saturar
+  if(bajosSku.length){
+    const shown=bajosSku.slice(0,TOPSKU);
+    $("#skualert").innerHTML=`<div class="panel alertpanel danger">
+      <div class="ah">⚠️ ${bajosSku.length} SKU bajo el margen de su categoría <span class="sub">margen del SKU (sin IVA) < margen ponderado de su categoría · filtros actuales${bajosSku.length>TOPSKU?" · se muestran los "+TOPSKU+" peores":""}</span></div>
+      <table class="alerttbl"><thead><tr>
+        <th class="l">SKU</th><th class="l">Producto</th><th class="l">Categoría</th><th>Q</th><th>Ingresos</th><th>Margen SKU</th><th>Margen cat.</th><th>Brecha</th>
+      </tr></thead><tbody>
+      ${shown.map(d=>`<tr>
+        <td class="l num">${d.sku}</td>
+        <td class="l">${d.prod}</td>
+        <td class="l">${d.cat}</td>
+        <td class="num">${fmtN(d.q)}</td>
+        <td class="num">${fmt$(d.ingr)}</td>
+        <td class="num neg">${fmtP(d.mg)}</td>
+        <td class="num">${fmtP(d.mgcat)}</td>
+        <td class="num neg">${((d.gap)*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})} pts</td>
+      </tr>`).join("")}
+      </tbody></table>
+    </div>`;
+  } else {
+    $("#skualert").innerHTML=`<div class="panel alertpanel ok">
+      <div class="ah">✓ Ningún SKU bajo el margen de su categoría <span class="sub">en los filtros seleccionados</span></div>
     </div>`;
   }
 
