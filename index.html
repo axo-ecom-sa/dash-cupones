@@ -825,10 +825,10 @@ function renderH1(rows){
     </div>`;
   }
 
-  // ===== Alerta 2: SKU que se venden con margen BAJO el de su categoría (ponderado) =====
-  // margen ponderado por categoría (sin IVA)
+  // ===== Alerta 2: SKU "viral con mal margen" — top 5% de volumen Y margen bajo su categoría =====
+  // Objetivo: cazar un SKU que se vende mucho por un precio/cupón mal hecho.
   const catAgg=new Map();   // catIdx -> {ingr, cost}
-  const skuMap=new Map();   // skuIdx -> {ingr, cost, ci}
+  const skuMap=new Map();   // skuIdx -> {ingr, cost, q, ci}
   for(const r of rows){
     const [,,mi,ci]=RAW.skus[r[C.sku]];
     if(!catAgg.has(ci))catAgg.set(ci,{ingr:0,cost:0});
@@ -839,26 +839,29 @@ function renderH1(rows){
   }
   const catMg=new Map();
   for(const [ci,c] of catAgg) catMg.set(ci, c.ingr?((c.ingr/IVA)-c.cost)/(c.ingr/IVA):0);
-  const bajosSku=[];
+  // umbral de volumen = percentil 95 de unidades por SKU (con venta > 0)
+  const qs=[...skuMap.values()].filter(s=>s.ingr>0).map(s=>s.q).sort((a,b)=>a-b);
+  const p95 = qs.length ? qs[Math.floor(qs.length*0.95)] : 0;
+  const PISO_PERDIDA = 50000;   // solo alertar si la plata perdida supera este piso ($)
+  const virales=[];
   for(const [k,s] of skuMap){
-    if(s.ingr<=0) continue;
+    if(s.ingr<=0 || s.q < p95) continue;         // solo top 5% de volumen
     const mg=((s.ingr/IVA)-s.cost)/(s.ingr/IVA);
     const mgcat=catMg.get(s.ci)||0;
-    if(mg < mgcat-TOL){
-      const [sku,prod,mi,ci,sci]=RAW.skus[k];
-      bajosSku.push({sku,prod,cat:RAW.cats[ci]||"—",ingr:s.ingr,q:s.q,mg,mgcat,gap:mg-mgcat});
-    }
+    if(mg >= mgcat-TOL) continue;                // y margen bajo su categoría
+    const perdida=(s.ingr/IVA)*mgcat - ((s.ingr/IVA)-s.cost);   // margen$ que dejó de ganar vs su categoría
+    if(perdida < PISO_PERDIDA) continue;         // y que el daño sea material
+    const [sku,prod,mi,ci]=RAW.skus[k];
+    virales.push({sku,prod,cat:RAW.cats[ci]||"—",q:s.q,ingr:s.ingr,mg,mgcat,perdida});
   }
-  bajosSku.sort((a,b)=>a.gap-b.gap);   // peor brecha primero
-  const TOPSKU=15;   // mostrar los 15 peores para no saturar
-  if(bajosSku.length){
-    const shown=bajosSku.slice(0,TOPSKU);
+  virales.sort((a,b)=>b.perdida-a.perdida);   // más plata perdida primero
+  if(virales.length){
     $("#skualert").innerHTML=`<div class="panel alertpanel danger">
-      <div class="ah">⚠️ ${bajosSku.length} SKU bajo el margen de su categoría <span class="sub">margen del SKU (sin IVA) < margen ponderado de su categoría · filtros actuales${bajosSku.length>TOPSKU?" · se muestran los "+TOPSKU+" peores":""}</span></div>
+      <div class="ah">⚠️ ${virales.length} SKU de alta venta con margen bajo su categoría <span class="sub">top 5% en volumen (≥${fmtN(p95)} u) · margen < su categoría · ordenados por margen perdido · filtros actuales</span></div>
       <table class="alerttbl"><thead><tr>
-        <th class="l">SKU</th><th class="l">Producto</th><th class="l">Categoría</th><th>Q</th><th>Ingresos</th><th>Margen SKU</th><th>Margen cat.</th><th>Brecha</th>
+        <th class="l">SKU</th><th class="l">Producto</th><th class="l">Categoría</th><th>Unidades</th><th>Ingresos</th><th>Margen SKU</th><th>Margen cat.</th><th>Margen perdido</th>
       </tr></thead><tbody>
-      ${shown.map(d=>`<tr>
+      ${virales.map(d=>`<tr>
         <td class="l num">${d.sku}</td>
         <td class="l">${d.prod}</td>
         <td class="l">${d.cat}</td>
@@ -866,13 +869,13 @@ function renderH1(rows){
         <td class="num">${fmt$(d.ingr)}</td>
         <td class="num neg">${fmtP(d.mg)}</td>
         <td class="num">${fmtP(d.mgcat)}</td>
-        <td class="num neg">${((d.gap)*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})} pts</td>
+        <td class="num neg">${fmt$(d.perdida)}</td>
       </tr>`).join("")}
       </tbody></table>
     </div>`;
   } else {
     $("#skualert").innerHTML=`<div class="panel alertpanel ok">
-      <div class="ah">✓ Ningún SKU bajo el margen de su categoría <span class="sub">en los filtros seleccionados</span></div>
+      <div class="ah">✓ Sin SKU virales con mal margen <span class="sub">ningún SKU de alta venta (top 5%) está bajo el margen de su categoría con daño &gt; ${fmt$(PISO_PERDIDA)}</span></div>
     </div>`;
   }
 
