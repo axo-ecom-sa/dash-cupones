@@ -801,8 +801,9 @@ function renderH1(rows){
 
   // ===== Alerta 1: cupones con margen post-cupón (sin IVA) BAJO el margen global ponderado del scope =====
   const mgGlobal = mrSinDesp;   // margen real sin IVA del scope (ponderado)
+  const TOL=0.0005;   // tolerancia 0,05 pts: evita falsos positivos por redondeo
   const cupData=cupAgg(rows, a.ingr);   // mgpost ya es sin IVA
-  const bajosCup=cupData.filter(d=>d.ing>0 && d.mgpost<mgGlobal).sort((x,y)=>x.mgpost-y.mgpost);
+  const bajosCup=cupData.filter(d=>d.ing>0 && d.mgpost < mgGlobal-TOL).sort((x,y)=>x.mgpost-y.mgpost);
   if(bajosCup.length){
     $("#cupalert").innerHTML=`<div class="panel alertpanel danger">
       <div class="ah">⚠️ ${bajosCup.length} cupón(es) bajo el margen promedio <span class="sub">margen post-cupón sin IVA bajo el promedio del scope (${fmtP(mgGlobal)}) · filtros actuales</span></div>
@@ -843,7 +844,7 @@ function renderH1(rows){
     if(s.ingr<=0) continue;
     const mg=((s.ingr/IVA)-s.cost)/(s.ingr/IVA);
     const mgcat=catMg.get(s.ci)||0;
-    if(mg<mgcat){
+    if(mg < mgcat-TOL){
       const [sku,prod,mi,ci,sci]=RAW.skus[k];
       bajosSku.push({sku,prod,cat:RAW.cats[ci]||"—",ingr:s.ingr,q:s.q,mg,mgcat,gap:mg-mgcat});
     }
