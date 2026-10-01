@@ -213,6 +213,11 @@ thead tr.cols th{font-size:.68rem;font-weight:600;letter-spacing:.05em;text-tran
 thead tr.cols th.l{text-align:left}
 thead tr.cols th:hover{color:var(--ink)}
 th.gsep,td.gsep{border-left:3px solid var(--lila-soft)}
+.tablewrap{overflow:auto;max-height:74vh}
+thead tr.groups th{position:sticky;top:0;z-index:3}
+thead tr.cols th{position:sticky;top:0;z-index:2;background:var(--panel)}
+#skutable thead tr.cols th,#cuptable thead tr.cols th{top:30px}
+#cuptable tr.totalrow td{position:sticky;top:60px;z-index:1}
 th .arr{color:var(--rosa)}
 td{padding:13px 12px;border-bottom:1px solid #F1EAF5;text-align:right;white-space:nowrap}
 td.l{text-align:left;white-space:normal;line-height:1.45}
@@ -372,7 +377,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
       </div>
       <span class="count" id="cupcount"></span>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tablewrap">
     <table id="cuptable">
       <thead>
         <tr class="groups">
@@ -418,7 +423,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
       <input type="search" id="ordsearch" placeholder="Buscar ID Magento, ID Oracle, marca o SKU…">
       <span class="count" id="ordcount"></span>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tablewrap">
     <table id="ordtable">
       <thead>
         <tr class="cols">
@@ -462,28 +467,28 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
       <input type="search" id="skusearch" placeholder="Buscar SKU, producto o marca…">
       <span class="count" id="skucount"></span>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tablewrap">
     <table id="skutable">
       <thead>
         <tr class="groups">
-          <th class="g1" colspan="3">Producto</th>
+          <th class="g1" colspan="5">Producto</th>
           <th class="g2" colspan="3">Venta</th>
           <th colspan="2">Descuento</th>
-          <th class="g4" colspan="4">Margen</th>
+          <th class="g4" colspan="2">Margen (sin IVA)</th>
         </tr>
         <tr class="cols">
           <th class="l" data-k="sku">SKU base</th>
           <th class="l" data-k="prod">Producto</th>
+          <th class="l" data-k="cat">Categoría</th>
+          <th class="l" data-k="subcat">Subcategoría</th>
           <th class="l" data-k="marca">Marca</th>
           <th class="gsep" data-k="ing">Ingresos</th>
           <th data-k="q">Q</th>
           <th data-k="pm">Precio medio</th>
           <th class="gsep" data-k="dl">Dto lista</th>
           <th data-k="dr">Dto real</th>
-          <th class="gsep" data-k="md">Margen dto</th>
-          <th data-k="mr">Margen real</th>
-          <th class="gsep" data-k="mdsi">Margen dto s/IVA</th>
-          <th data-k="mrsi">Margen real s/IVA</th>
+          <th class="gsep" data-k="mdsi">Margen dto</th>
+          <th data-k="mrsi">Margen real</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -842,14 +847,12 @@ function skuAgg(rows){
     o.ing+=r[C.ing];o.ingr+=r[C.ingr];o.dl+=r[C.dl];o.dc+=r[C.dc];o.cost+=r[C.cost];o.q+=r[C.q];
   }
   return [...m.entries()].map(([k,o])=>{
-    const [sku,prod,mi]=RAW.skus[k];
+    const [sku,prod,mi,ci,sci]=RAW.skus[k];
     const lista=o.ing+o.dl;
-    return {sku,prod,marca:RAW.marcas[mi],
+    return {sku,prod,cat:RAW.cats[ci]||"—",subcat:RAW.subcats[sci]||"—",marca:RAW.marcas[mi],
       ing:o.ingr,q:o.q,pm:o.q?o.ingr/o.q:0,
       dl:o.dl,dlp:lista?o.dl/lista:0,
       dr:o.dl+o.dc,drp:lista?(o.dl+o.dc)/lista:0,
-      md:o.ing-o.cost,mdp:o.ing?(o.ing-o.cost)/o.ing:0,
-      mr:o.ingr-o.cost,mrp:o.ingr?(o.ingr-o.cost)/o.ingr:0,
       mdsi:o.ing?((o.ing/1.19)-o.cost)/(o.ing/1.19):0,
       mrsi:o.ingr?((o.ingr/1.19)-o.cost)/(o.ingr/1.19):0};
   });
@@ -859,7 +862,7 @@ function renderH2(rows){
   let data=skuAgg(rows);
   if(skuQuery){
     const q=skuQuery.toLowerCase();
-    data=data.filter(d=>d.sku.toLowerCase().includes(q)||d.prod.toLowerCase().includes(q)||d.marca.toLowerCase().includes(q));
+    data=data.filter(d=>d.sku.toLowerCase().includes(q)||d.prod.toLowerCase().includes(q)||d.marca.toLowerCase().includes(q)||d.cat.toLowerCase().includes(q)||d.subcat.toLowerCase().includes(q));
   }
   const k=skuSort.k,dir=skuSort.dir;
   data.sort((a,b)=>{
@@ -872,14 +875,14 @@ function renderH2(rows){
   $("#skutable tbody").innerHTML=slice.length?slice.map(d=>`<tr>
     <td class="l num">${d.sku}</td>
     <td class="l">${d.prod}</td>
+    <td class="l">${d.cat}</td>
+    <td class="l">${d.subcat}</td>
     <td class="l"><span class="pill">${d.marca}</span></td>
     <td class="num gsep">${fmt$(d.ing)}</td>
     <td class="num">${fmtN(d.q)}</td>
     <td class="num">${fmt$(d.pm)}</td>
     <td class="num gsep">${fmtP(d.dlp)}</td>
     <td class="num">${fmtP(d.drp)}</td>
-    <td class="num gsep">${fmtP(d.mdp)}</td>
-    <td class="num ${d.mr<0?"neg":"pos"}">${fmtP(d.mrp)}</td>
     <td class="num gsep">${fmtP(d.mdsi)}</td>
     <td class="num ${d.mrsi<0?"neg":"pos"}">${fmtP(d.mrsi)}</td>
   </tr>`).join(""):'<tr><td colspan="12" class="empty l">Sin resultados. Prueba con otro término o limpia los filtros.</td></tr>';
