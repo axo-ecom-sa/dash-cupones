@@ -301,6 +301,8 @@ td .pct{color:var(--muted);font-size:.74rem;margin-left:6px}
 .filebtn{font-weight:600;color:var(--morado-ink);border:1px solid #DFD1F1;border-radius:10px;padding:6px 13px;cursor:pointer;background:#fff}
 .dlbtn{font:inherit;font-size:.78rem;font-weight:600;color:var(--morado-ink);border:1px solid #DFD1F1;border-radius:8px;padding:5px 12px;cursor:pointer;background:#fff;margin-left:auto;white-space:nowrap}
 .dlbtn:hover{background:var(--morado);color:#fff;border-color:var(--morado)}
+.dlbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.ah .dlbtn{margin-left:auto}
 .filebtn:hover{background:var(--morado);color:#fff;border-color:var(--morado)}
 .loadhint{color:var(--muted);margin-left:auto}
 body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
@@ -366,6 +368,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
   <div class="pagebar"><label for="fmarca_p1">Marca</label>
     <select id="fmarca_p1"><option value="-1">Todas las marcas</option></select>
     <span class="hint">filtro independiente de esta hoja</span></div>
+  <div class="dlbar"><button type="button" class="dlbtn" onclick="exportResumen()">⬇ Descargar resumen (CSV)</button></div>
   <div id="cards1"></div>
 
   <div id="cupalert"></div>
@@ -373,7 +376,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
   <div id="skualert"></div>
 
   <div class="panel">
-    <h2>Ingreso y margen por día</h2>
+    <h2>Ingreso y margen por día <button type="button" class="dlbtn" onclick="exportDaily()">⬇ CSV</button></h2>
     <div class="sub">Barras = ingreso diario con despacho · línea = % margen (sin IVA, sin despacho)</div>
     <div id="daily"></div>
   </div>
@@ -443,7 +446,7 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
   </div>
 
   <div class="panel">
-    <h2>Usos por día</h2>
+    <h2>Usos por día <button type="button" class="dlbtn" onclick="exportCupDaily()">⬇ CSV</button></h2>
     <div class="sub">Órdenes distintas por día · responde al filtro de cupones de arriba</div>
     <div id="cupdaily"></div>
   </div>
@@ -460,7 +463,8 @@ body.drag{outline:3px dashed var(--rosa);outline-offset:-6px}
     <div class="tablebar">
       <input type="search" id="ordsearch" placeholder="Buscar ID Magento, ID Oracle, marca, SKU o tipo de despacho…">
       <span class="count" id="ordcount"></span>
-      <button type="button" class="dlbtn" onclick="exportTableCSV('#ordtable','ordenes')">⬇ Descargar CSV</button>
+      <button type="button" class="dlbtn" onclick="exportTableCSV('#ordtable','ordenes')">⬇ Órdenes CSV</button>
+      <button type="button" class="dlbtn" onclick="exportOrderLines()">⬇ Líneas (detalle) CSV</button>
     </div>
     <div class="tablewrap">
     <table id="ordtable">
@@ -776,6 +780,91 @@ const C={store:0,order:1,fecha:2,hora:3,sku:4,q:5,ing:6,ingr:7,dl:8,dc:9,cost:10
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
+// Genérico: recibe filas 2D (primera fila = encabezados) y descarga CSV
+function downloadCSV(filename, rows2d){
+  const csv=rows2d.map(row=>row.map(c=>{
+    const v=(c==null?"":String(c));
+    return /[",;\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+  }).join(";")).join("\r\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=(filename||"datos")+"_"+(new Date().toISOString().slice(0,10))+".csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// Exporta los KPIs del resumen (Hoja 1) según los filtros actuales
+function exportResumen(){
+  if(!RAW)return; const IVA=1.19;
+  const a=agg(filtered(FM.p1));
+  const mrSD=a.ingr?((a.ingr/IVA-a.cost)/(a.ingr/IVA)):0;
+  const mrCD=(a.ingr+a.env)?(((a.ingr+a.env)/IVA-a.cost)/((a.ingr+a.env)/IVA)):0;
+  const mpre=a.ing?((a.ing/IVA-a.cost)/(a.ing/IVA)):0;
+  const p=x=>(x*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
+  const rows=[["Métrica","Valor"],
+    ["Ingresos totales con despacho",Math.round(a.ingTotal)],
+    ["Ingresos sin despacho",Math.round(a.ingr)],
+    ["Despacho",Math.round(a.env)],
+    ["Margen total sin IVA, sin despacho",p(mrSD)],
+    ["Margen total sin IVA, con despacho",p(mrCD)],
+    ["Margen pre-cupón sin IVA, sin despacho",p(mpre)],
+    ["Transacciones",a.tx],
+    ["Ticket promedio con despacho",a.tx?Math.round(a.ingTotal/a.tx):0],
+    ["Ticket promedio sin despacho",a.tx?Math.round(a.ingr/a.tx):0],
+    ["Artículos",a.q],
+    ["Precio medio artículo (sin despacho)",a.q?Math.round(a.ingr/a.q):0],
+    ["Órdenes con cupón",a.txCup],
+    ["% pedidos con reglas de cupones",p(a.tx?a.txCup/a.tx:0)],
+  ];
+  downloadCSV("resumen",rows);
+}
+
+// Serie diaria (Hoja 1): ingreso con/sin despacho y margen por día
+function exportDaily(){
+  if(!RAW)return; const IVA=1.19;
+  const m=new Map();
+  for(const r of filtered(FM.p1)){const d=r[C.fecha];if(!m.has(d))m.set(d,{cd:0,sd:0,cost:0});const o=m.get(d);o.cd+=r[C.ingr]+r[C.env];o.sd+=r[C.ingr];o.cost+=r[C.cost];}
+  const rows=[["Fecha","Ingreso con despacho","Ingreso sin despacho","Margen sin IVA %"]];
+  [...m.keys()].sort().forEach(d=>{const o=m.get(d);const mg=o.sd?((o.sd/IVA-o.cost)/(o.sd/IVA)):0;rows.push([d,Math.round(o.cd),Math.round(o.sd),(mg*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})+"%"]);});
+  downloadCSV("ingreso_por_dia",rows);
+}
+
+// Usos por día del cupón (Hoja 2) según el filtro de cupones activo
+function exportCupDaily(){
+  if(!RAW)return;
+  const selSet=cupSel.size?cupSel:null;
+  const m=new Map();
+  for(const r of filtered(FM.p3)){
+    if(r[C.cup]<0)continue;
+    if(selSet&&!selSet.has(RAW.cupones[r[C.cup]]))continue;
+    const d=r[C.fecha];if(!m.has(d))m.set(d,{o:new Set(),ingr:0});
+    const x=m.get(d);x.o.add(r[C.order]);x.ingr+=r[C.ingr];
+  }
+  const rows=[["Fecha","Usos (órdenes)","Ingreso c/cupón"]];
+  [...m.keys()].sort().forEach(d=>{const x=m.get(d);rows.push([d,x.o.size,Math.round(x.ingr)]);});
+  downloadCSV("usos_cupon_por_dia",rows);
+}
+
+// Todas las líneas de las órdenes filtradas (Hoja 3) — detalle crudo
+function exportOrderLines(){
+  if(!RAW)return; const IVA=1.19;
+  const rows=[["ID Magento","ID Oracle","Fecha","Tipo despacho","SKU","Producto","Categoría","Subcategoría","Marca","Cantidad","Ingreso s/cupón","Ingreso c/cupón","Costo","Margen s/IVA %","Código cupón","Regla"]];
+  for(const r of filtered(FM.p4)){
+    const oi=r[C.order];
+    const [sku,prod,mi,ci,sci]=RAW.skus[r[C.sku]];
+    const mg=r[C.ingr]?((r[C.ingr]/IVA)-r[C.cost])/(r[C.ingr]/IVA):0;
+    rows.push([
+      RAW.orders[oi], RAW.oracles[oi]||"", r[C.fecha], (RAW.shipDesc?RAW.shipDesc[oi]:"")||"",
+      sku, prod, RAW.cats[ci]||"", RAW.subcats[sci]||"", RAW.marcas[mi],
+      r[C.q], Math.round(r[C.ing]), Math.round(r[C.ingr]), Math.round(r[C.cost]),
+      (mg*100).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1})+"%",
+      r[C.code]>=0?RAW.codes[r[C.code]]:"", r[C.rule]>=0?RAW.rules[r[C.rule]]:""
+    ]);
+  }
+  downloadCSV("ordenes_lineas",rows);
+}
+
 // Exporta a CSV el contenido visible de una tabla (usa la fila de encabezados .cols)
 function exportTableCSV(tableSel, filename){
   const tabla=document.querySelector(tableSel);
@@ -918,8 +1007,8 @@ function renderH1(rows){
   const bajosCup=cupData.filter(d=>d.ing>0 && d.mgpost < mgGlobal-TOL).sort((x,y)=>x.mgpost-y.mgpost);
   if(bajosCup.length){
     $("#cupalert").innerHTML=`<div class="panel alertpanel danger">
-      <div class="ah">⚠️ ${bajosCup.length} cupón(es) bajo el margen promedio <span class="sub">margen post-cupón sin IVA bajo el promedio del scope (${fmtP(mgGlobal)}) · filtros actuales</span></div>
-      <table class="alerttbl"><thead><tr>
+      <div class="ah">⚠️ ${bajosCup.length} cupón(es) bajo el margen promedio <span class="sub">margen post-cupón sin IVA bajo el promedio del scope (${fmtP(mgGlobal)}) · filtros actuales</span><button type="button" class="dlbtn" onclick="exportTableCSV('#cupalerttbl','alerta_cupones')">⬇ CSV</button></div>
+      <table id="cupalerttbl" class="alerttbl"><thead><tr>
         <th class="l">Cupón</th><th>Usos</th><th>Ingresos</th><th>Margen post</th><th>vs promedio</th>
       </tr></thead><tbody>
       ${bajosCup.map(d=>`<tr>
@@ -969,8 +1058,8 @@ function renderH1(rows){
   virales.sort((a,b)=>b.perdida-a.perdida);   // más plata perdida primero
   if(virales.length){
     $("#skualert").innerHTML=`<div class="panel alertpanel danger">
-      <div class="ah">⚠️ ${virales.length} SKU de alta venta con margen bajo su categoría <span class="sub">top 5% en volumen (≥${fmtN(p95)} u) · margen < su categoría · ordenados por margen perdido · filtros actuales</span></div>
-      <table class="alerttbl"><thead><tr>
+      <div class="ah">⚠️ ${virales.length} SKU de alta venta con margen bajo su categoría <span class="sub">top 5% en volumen (≥${fmtN(p95)} u) · margen < su categoría · ordenados por margen perdido · filtros actuales</span><button type="button" class="dlbtn" onclick="exportTableCSV('#skualerttbl','alerta_sku_virales')">⬇ CSV</button></div>
+      <table id="skualerttbl" class="alerttbl"><thead><tr>
         <th class="l">SKU</th><th class="l">Producto</th><th class="l">Categoría</th><th>Unidades</th><th>Ingresos</th><th>Margen SKU</th><th>Margen cat.</th><th>Margen perdido</th>
       </tr></thead><tbody>
       ${virales.map(d=>`<tr>
